@@ -7,14 +7,14 @@
 4.Once activated venv,type "pip install -r requirements.txt" .This will install dependencies listed.
 
 5.create a .env file in the root of the project and make adjustments
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=api-key
-CLOUDINARY_API_SECRET=secret-key
-DB_NAME=your-db-name
-DB_USER=db-user
-DB_PASS=password
-DB_HOST=host    #mainly localhost
-DB_PORT=port    #mainl  5432
+              CLOUDINARY_CLOUD_NAME=your-cloud-name
+              CLOUDINARY_API_KEY=api-key
+              CLOUDINARY_API_SECRET=secret-key
+              DB_NAME=your-db-name
+              DB_USER=db-user
+              DB_PASS=password
+              DB_HOST=host    #mainly localhost
+              DB_PORT=port    #mainly  5432
 
        - you need to create a cloudinary id by signing in https://cloudinary.com/
        - cloudinary is used for stroing images
