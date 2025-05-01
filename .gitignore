@@ -1,0 +1,91 @@
+# .gitignore for Python/FastAPI Projects
+
+### Python ###
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyre
+*.so
+.Python
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+pip-selfcheck.json
+
+### IDE ###
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+### Database ###
+*.sqlite
+*.sql
+*.db
+/postgres_data/  # Local PostgreSQL data directory
+
+### Environment ###
+.env
+.env.local
+.env.*.local
+secrets.yml
+*.key
+*.cert
+*.pem
+
+### Logs ###
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+### Dependencies ###
+node_modules/
+dist/
+build/
+*.egg-info/
+*.egg
+.coverage
+
+### Cloudinary/Uploads ###
+uploads/
+tmp/
+*.download
+
+### Testing ###
+.coverage
+htmlcov/
+.pytest_cache/
+
+### OS Generated ###
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+### Build/Artifacts ###
+*.exe
+*.dll
+*.lib
+*.obj
+*.o
+*.a
+*.out
+*.app
+*.jar
+*.war
+*.ear
+*.class
+
+### Project-Specific ###
+# Add any project-specific files/dirs here

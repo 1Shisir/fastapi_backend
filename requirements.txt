@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+python-jose
+passlib
+pydantic
+python-multipart
+alembic
+websockets
+python-dotenv
+cloudinary
