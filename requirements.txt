@@ -10,3 +10,4 @@ alembic
 websockets
 python-dotenv
 cloudinary
+pydantic[email]
