@@ -95,7 +95,10 @@ def get_my_posts(
 
 @router.get("/", response_model=list[PostOut])
 def get_posts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    return crud.get_posts(db, skip=skip, limit=limit)
+    post = db.query(Post).offset(skip).limit(limit).all()
+    if not post:
+        raise HTTPException(status_code=404, detail="No posts found")
+    return post     
 
 
 @router.get("/{post_id}", response_model=PostOut)
