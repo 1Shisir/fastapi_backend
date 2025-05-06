@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.schemas.post import PostCreate, PostOut
 from app.core.security import get_current_user
 from app.db.models.post import Post
+from cloudinary.exceptions import Error as CloudinaryError
 
 router = APIRouter()
 
