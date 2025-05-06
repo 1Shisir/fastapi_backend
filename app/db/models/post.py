@@ -9,6 +9,8 @@ class Post(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     content = Column(Text, nullable=False)
+    image_url = Column(String, nullable=True)
+    image_public_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     likes_count = Column(Integer, default=0)
 

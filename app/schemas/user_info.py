@@ -54,6 +54,22 @@ class UserInfoResponse(BaseModel):
     class Config:
         from_attributes = True          
 
+class UserInfoUpdate(BaseModel):
+    address:Optional[str] = None
+    phone_number: Optional[str] = None
+    dob: Optional[date] = None  # Use str for date representation
+    passions: Optional[str] = None
+    lifestyle: Optional[str] = None
+    dietary: Optional[str] = None
+    available: Optional[bool] = None
+    religion: Optional[str] = None
+    number_of_children: Optional[int] = None
+    profile_picture: Optional[str] = None
+    profile_public_id: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+    
 
 class UserInfoUpdateByAdmin(BaseModel):
     is_verified: bool | None = False

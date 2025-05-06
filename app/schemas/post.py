@@ -1,8 +1,11 @@
 from pydantic import BaseModel
 from datetime import datetime
+from typing import Optional
 
 class PostBase(BaseModel):
     content: str
+    image_url:Optional [str] = None
+    image_public_id: Optional[str] = None
     likes_count: int = 0
 
 class PostCreate(PostBase):
