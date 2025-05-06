@@ -142,6 +142,9 @@ async def add_bio(
         )    
         return new_info
 
+#update user bio
+               
+
 # Get user bio
 @router.get("/me/bio", response_model=UserInfoResponse)
 def get_user_bio(

@@ -75,12 +75,17 @@ async def login( db: Session = Depends(get_db),form_data: OAuth2PasswordRequestF
             detail="Incorrect username or password",
         )
 
+    token_data = {
+        "sub": user.email,
+        "role": user.role,
+    }
+
     #check of admin
     if user.role == "admin":
         access_token = create_access_token(
-            data={"sub": user.email}
+            token_data
         )
-        return Token(access_token=access_token, token_type="bearer")
+        return Token(access_token=access_token, token_type="bearer", role=user.role)
     
     # Regular users need verified UserInfo
     if not user.user_info or not user.user_info.is_verified == True:
@@ -90,8 +95,8 @@ async def login( db: Session = Depends(get_db),form_data: OAuth2PasswordRequestF
         )        
 
     access_token = create_access_token(
-        data={"sub": user.email}
+        token_data
     )
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(access_token=access_token, token_type="bearer", role=user.role)
     
    
