@@ -5,7 +5,6 @@ from app.schemas import post as schemas
 from app.schemas.post import PostOut
 from app.db.models.post import Post
 from app.db.models.like import Like
-from app.crud import post as crud
 from app.core.security import get_current_user
 
 router = APIRouter(prefix="/like", tags=["Likes"])

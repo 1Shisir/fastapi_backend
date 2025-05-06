@@ -10,11 +10,20 @@ from app.db.models.user import User
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.schemas.post import PostCreate, PostOut
-from app.crud import post as crud
 from app.core.security import get_current_user
 from app.db.models.post import Post
 
 router = APIRouter()
+
+#get all posts
+@router.get("/", response_model=list[PostOut])
+def get_all_posts(
+    db: Session = Depends(get_db),
+):
+    posts = db.query(Post).all()
+    if not posts:
+        raise HTTPException(status_code=404, detail="No posts found")
+    return posts
 
 @router.post("/create", response_model=PostOut)
 async def create_post(
@@ -93,14 +102,6 @@ def get_my_posts(
     return post
 
 
-@router.get("/", response_model=list[PostOut])
-def get_posts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    post = db.query(Post).offset(skip).limit(limit).all()
-    if not post:
-        raise HTTPException(status_code=404, detail="No posts found")
-    return post     
-
-
 @router.get("/{post_id}", response_model=PostOut)
 def get_post_by_id(
     post_id: str,
@@ -128,4 +129,4 @@ def delete_post(
     message = "Post deleted successfully"    
     db.delete(post)
     db.commit()
-    return {"msg": message, "post": PostOut.from_orm(post)}      
+    return {"msg": message, "post": PostOut.from_orm(post)}  
