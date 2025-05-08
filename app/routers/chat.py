@@ -115,6 +115,24 @@ def get_chat_history(
         .limit(page_size)\
         .all()        
 
+#get all chats
+@router.get("/all", response_model=List[MessageBase])
+def get_all_chats(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    return db.query(Message)\
+        .filter(
+            (Message.sender_id == current_user.id) |
+            (Message.receiver_id == current_user.id)
+        )\
+        .order_by(Message.timestamp.desc())\
+        .offset((page-1)*page_size)\
+        .limit(page_size)\
+        .all()
+
 # Mark message as read
 @router.put("/messages/{message_id}/read")
 def mark_as_read(

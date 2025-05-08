@@ -115,7 +115,7 @@ def get_post_by_id(
     return post  
 
 #delete post
-@router.delete("/{post_id}", response_model=PostOut)
+@router.delete("/{post_id}")
 def delete_post(
     post_id: str,
     db: Session = Depends(get_db),
@@ -130,4 +130,4 @@ def delete_post(
     message = "Post deleted successfully"    
     db.delete(post)
     db.commit()
-    return {"msg": message, "post": PostOut.from_orm(post)}  
+    return {"msg": message}  
