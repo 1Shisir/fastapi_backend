@@ -30,6 +30,17 @@ def get_all_users(
         raise HTTPException(status_code=404, detail="No users found")
     return users
 
+#get all unverified users
+@router.get("/unverified-users", response_model=List[UserOut])
+def get_unverified_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin)
+):
+    unverified_users = db.query(User).filter(User.role != "admin").join(UserInfo).filter(UserInfo.is_verified == False).all()
+    if not unverified_users:
+        raise HTTPException(status_code=404, detail="No unverified users found")
+    return unverified_users
+
 #verify user
 @router.post("/verify/{user_id}")
 def verify_user(
