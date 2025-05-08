@@ -261,6 +261,9 @@ def get_user_bio(
     ).first()
 
     if not user_info:
-        raise HTTPException(status_code=404, detail="User bio not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User bio not found"
+        )
 
-    return user_info        
+    return user_info 

@@ -37,6 +37,7 @@ class UserInfoCreate(BaseModel):
 
 class UserInfoResponse(BaseModel):
     id: int
+    user_id: int | None = None
     address: str | None = None
     phone_number: str | None = None
     dob: date | None = None  # Use str for date representation
@@ -48,7 +49,6 @@ class UserInfoResponse(BaseModel):
     religion: str | None = None
     number_of_children: int | None = None
     profile_picture: str | None = None
-    user_id: int | None = None
     profile_public_id: Optional[str] = None
 
     class Config:
