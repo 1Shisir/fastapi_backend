@@ -40,6 +40,6 @@ def toogle_like(
     db.commit()
 
     return {
-        "message": message,
+        "msg": message,
         "post": PostOut.from_orm(post),
     }
