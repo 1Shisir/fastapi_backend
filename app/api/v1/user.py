@@ -26,6 +26,18 @@ def get_users(
     user = db.query(User).filter(User.role != "admin").all()
     return user
 
+@router.get("/me", response_model=UserOut)
+def get_user_me(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return user
 
 #Add user bio
 @router.post("/me/add-bio", response_model=UserInfoResponse)
