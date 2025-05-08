@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from pydantic import ValidationError
 from app.db.models.user import User
 from app.db.models.user_info import UserInfo
-from app.schemas.user import *
+from app.schemas.user import UserOut
 from app.schemas.user_info import UserInfoCreate, UserInfoResponse, UserInfoUpdate
 from app.db.session import get_db
 from typing import List, Optional
@@ -23,21 +23,55 @@ router = APIRouter()
 def get_users(
     db: Session = Depends(get_db),
 ):
-    user = db.query(User).filter(User.role != "admin").all()
-    return user
+    users = db.query(User,UserInfo)\
+        .outerjoin(UserInfo, User.id == UserInfo.user_id)\
+        .filter(
+            User.role != "admin"
+        )\
+        .all()
+    
+    if not users:
+        return []  # Return an empty list if no users are found
+
+    #formatting the response
+    response = [
+        {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "profile_picture": user_info.profile_picture
+        }
+        for user,user_info in users
+    ]
+    return response    
 
 @router.get("/me", response_model=UserOut)
 def get_user_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    user = db.query(User).filter(User.id == current_user.id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-    return user
+    # Fetch user and user info
+    # Use outerjoin to include user info even if it doesn't exist
+    result = db.query(User, UserInfo)\
+        .outerjoin(UserInfo, User.id == UserInfo.user_id)\
+        .filter(User.id == current_user.id)\
+        .first()
+
+    user, user_info = result if result else (current_user, None)
+
+    # Build response dictionary
+    response = {
+        "id": current_user.id,
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "role": current_user.role,
+        "profile_picture": user_info.profile_picture if user_info else None
+    }
+
+    return response
 
 #Add user bio
 @router.post("/me/add-bio", response_model=UserInfoResponse)
