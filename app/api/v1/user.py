@@ -15,6 +15,7 @@ from app.core.security import get_current_user,are_friends
 from cloudinary import uploader
 from cloudinary.uploader import upload,destroy
 from cloudinary.exceptions import Error as CloudinaryError
+from app.db.models.connection_request import ConnectionRequest
 
 
 router = APIRouter()
@@ -316,4 +317,38 @@ def get_user_bio(
             detail="User bio not found"
         )
 
-    return user_info 
+    return user_info
+
+
+# get requests sent by other users to the current user
+@router.get("/me/requests", response_model=List[UserOut])
+def get_connection_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Get all pending requests sent to current user
+    requests = db.query(User, ConnectionRequest, UserInfo)\
+        .join(ConnectionRequest, User.id == ConnectionRequest.sender_id)\
+        .outerjoin(UserInfo, User.id == UserInfo.user_id)\
+        .filter(
+            ConnectionRequest.receiver_id == current_user.id,
+            ConnectionRequest.status == "pending",
+            User.role != "admin",
+            User.id != current_user.id
+        )\
+        .all()
+
+    # Format response with profile pictures
+    response = [
+        {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "profile_picture": user_info.profile_picture if user_info else None
+        }
+        for user, _, user_info in requests  # _ is the ConnectionRequest we don't need here
+    ]
+
+    return response
