@@ -11,7 +11,7 @@ from app.schemas.user_info import UserInfoCreate, UserInfoResponse, UserInfoUpda
 from app.db.session import get_db
 from typing import List, Optional
 from sqlalchemy.orm import Session
-from app.core.security import get_current_user
+from app.core.security import get_current_user,are_friends
 from cloudinary import uploader
 from cloudinary.uploader import upload,destroy
 from cloudinary.exceptions import Error as CloudinaryError
@@ -19,14 +19,17 @@ from cloudinary.exceptions import Error as CloudinaryError
 
 router = APIRouter()
 
-@router.get("/",response_model=List[UserOut])
+#get user who are  not friends with the current user
+@router.get("/suggested",response_model=List[UserOut])
 def get_users(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     users = db.query(User,UserInfo)\
         .outerjoin(UserInfo, User.id == UserInfo.user_id)\
         .filter(
-            User.role != "admin"
+            User.role != "admin",
+            User.id != current_user.id,
         )\
         .all()
     
@@ -44,6 +47,7 @@ def get_users(
             "profile_picture": user_info.profile_picture
         }
         for user,user_info in users
+        if not are_friends(db, current_user.id, user.id)
     ]
     return response    
 
