@@ -1,6 +1,7 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy.sql import case
 from collections import defaultdict
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -128,30 +129,33 @@ def get_chat_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Subquery to get distinct users and latest message time
+    # Subquery to identify conversation partners and latest message time
     subquery = (
         db.query(
-            Message.sender_id.label("user_id"),
+            case(
+                    (Message.sender_id == current_user.id, Message.receiver_id),
+                    (Message.receiver_id == current_user.id, Message.sender_id),  
+                else_=None
+            ).label("partner_id"),
             func.max(Message.timestamp).label("latest_message")
         )
-        .filter(Message.receiver_id == current_user.id)
-        .group_by(Message.sender_id)
-        .union_all(
-            db.query(
-                Message.receiver_id.label("user_id"),
-                func.max(Message.timestamp).label("latest_message")
-            )
-            .filter(Message.sender_id == current_user.id)
-            .group_by(Message.receiver_id)
+        .filter(
+            (Message.sender_id == current_user.id) |
+            (Message.receiver_id == current_user.id)
         )
+        .group_by("partner_id")
         .subquery()
     )
 
     # Main query to get user details
     chat_users = (
-        db.query(User, UserInfo, subquery.c.latest_message)
+        db.query(User, UserInfo)
+        .join(subquery, User.id == subquery.c.partner_id)
         .outerjoin(UserInfo, User.id == UserInfo.user_id)
-        .join(subquery, User.id == subquery.c.user_id)
+        .filter(
+            User.id != current_user.id,
+            User.role != "admin"
+        )
         .order_by(subquery.c.latest_message.desc())
         .offset((page-1)*page_size)
         .limit(page_size)
@@ -167,7 +171,7 @@ def get_chat_users(
             "role": user.role,
             "profile_picture": user_info.profile_picture if user_info else None
         }
-        for user, user_info, _ in chat_users
+        for user, user_info in chat_users
     ]
 
 # Mark message as read
