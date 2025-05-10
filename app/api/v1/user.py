@@ -5,6 +5,8 @@ import logging,json
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import ValidationError
 from app.db.models.user import User
+from app.db.models.post import Post
+from app.db.models.like import Like
 from app.db.models.user_info import UserInfo
 from app.schemas.user import UserOut
 from app.schemas.user_info import UserInfoCreate, UserInfoResponse, UserInfoUpdate
@@ -16,6 +18,7 @@ from cloudinary import uploader
 from cloudinary.uploader import upload,destroy
 from cloudinary.exceptions import Error as CloudinaryError
 from app.db.models.connection_request import ConnectionRequest
+from app.schemas.post import PostOut
 
 
 router = APIRouter()
@@ -352,3 +355,22 @@ def get_connection_requests(
     ]
 
     return response
+
+#get posts liked by the current user
+@router.get("/me/liked-posts", response_model=List[PostOut])
+def get_liked_posts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Fetch posts liked by the current user
+    liked_posts = db.query(Post)\
+        .join(Like, Post.id == Like.post_id)\
+        .filter(
+            Like.user_id == current_user.id
+        )\
+        .all()
+    
+    if not liked_posts:
+        return []  # Return an empty list if no liked posts are found
+    
+    return liked_posts

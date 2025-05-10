@@ -1,10 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-import json
 from typing import Optional
 import time
 import logging
 from cloudinary import uploader
-from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from app.db.models.user import User
 from sqlalchemy.orm import Session
@@ -29,7 +27,7 @@ def get_all_posts(
 @router.post("/create", response_model=PostOut)
 async def create_post(
     content: str = Form(...),
-    post_image: Optional[UploadFile] = File(None),
+    post_image: Optional[UploadFile] = File(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -44,7 +42,9 @@ async def create_post(
     #     )
 
     image_data = {}
-    if post_image:
+    
+    if post_image and post_image.filename and post_image.size > 0:
+
         try:
             # Validate image
             if post_image.content_type not in ["image/jpeg", "image/png", "image/webp"]:
