@@ -1,5 +1,4 @@
 from fastapi import APIRouter,Depends,HTTPException,status,File,UploadFile,Form
-from fastapi.encoders import jsonable_encoder
 import time
 import logging,json
 from sqlalchemy.exc import SQLAlchemyError
@@ -24,36 +23,80 @@ from app.schemas.post import PostOut
 router = APIRouter()
 
 #get user who are  not friends with the current user
-@router.get("/suggested",response_model=List[UserOut])
-def get_users(
+# @router.get("/suggested",response_model=List[UserOut])
+# def get_users(
+#     db: Session = Depends(get_db),
+#     current_user: User = Depends(get_current_user)
+# ):
+#     users = db.query(User,UserInfo)\
+#         .outerjoin(UserInfo, User.id == UserInfo.user_id)\
+#         .filter(
+#             User.role != "admin",
+#             User.id != current_user.id,
+#         )\
+#         .all()
+    
+#     if not users:
+#         return []  # Return an empty list if no users are found
+
+#     #formatting the response
+#     response = [
+#         {
+#             "id": user.id,
+#             "email": user.email,
+#             "first_name": user.first_name,
+#             "last_name": user.last_name,
+#             "role": user.role,
+#             "profile_picture": user_info.profile_picture
+#         }
+#         for user,user_info in users
+#         if not are_friends(db, current_user.id, user.id)
+#     ]
+#     return response    
+
+
+@router.get("/suggested", response_model=List[UserOut])
+def get_suggested_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    users = db.query(User,UserInfo)\
-        .outerjoin(UserInfo, User.id == UserInfo.user_id)\
+    # Subquery to find all users with existing connection requests
+    connection_subquery = (
+        db.query(ConnectionRequest.sender_id.label("user_id"))
+        .filter(ConnectionRequest.receiver_id == current_user.id)
+        .union_all(
+            db.query(ConnectionRequest.receiver_id.label("user_id"))
+            .filter(ConnectionRequest.sender_id == current_user.id)
+        )
+        .subquery()
+    )
+
+    # Main query
+    suggested_users = (
+        db.query(User, UserInfo)
+        .outerjoin(UserInfo, User.id == UserInfo.user_id)
         .filter(
             User.role != "admin",
             User.id != current_user.id,
-        )\
+            ~User.id.in_(db.query(connection_subquery.c.user_id))
+        )
         .all()
-    
-    if not users:
-        return []  # Return an empty list if no users are found
+    )
 
-    #formatting the response
-    response = [
+    return [
         {
             "id": user.id,
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
             "role": user.role,
-            "profile_picture": user_info.profile_picture
+            "profile_picture": user_info.profile_picture if user_info else None
         }
-        for user,user_info in users
-        if not are_friends(db, current_user.id, user.id)
+        for user, user_info in suggested_users
     ]
-    return response    
+
+
+
 
 @router.get("/me", response_model=UserOut)
 def get_user_me(

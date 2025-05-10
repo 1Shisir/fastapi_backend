@@ -1,5 +1,4 @@
 from pydantic import BaseModel, EmailStr
-from app.schemas.user_info import UserInfo
 from typing import Optional
 
 class UserBase(BaseModel):
@@ -7,7 +6,6 @@ class UserBase(BaseModel):
     first_name: str
     last_name: str
     password: str
-    role: str = "user"
 
 class UserCreate(UserBase):
     password: str

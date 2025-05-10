@@ -8,23 +8,21 @@ from app.schemas.user import *
 from app.schemas.token import Token
 from app.core.security import hash_password, verify_password, create_access_token
 from app.db.session import get_db
-from datetime import timedelta
-from typing import Annotated
+
 
 router = APIRouter()
 
 
-@router.post("/register")
+@router.post("/register") 
 def register(user_in: UserBase, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == user_in.email).first()
     if user:
         raise HTTPException(status_code=400, detail="Email already registered")
     new_user = User(
-        email=user_in.email,
-        first_name=user_in.first_name,
-        last_name=user_in.last_name,
+        email= user_in.email,
+        first_name= user_in.first_name,
+        last_name= user_in.last_name,
         password=hash_password(user_in.password),
-        role=user_in.role if user_in.role else "user",
     )
     db.add(new_user)
     db.commit()
@@ -32,21 +30,13 @@ def register(user_in: UserBase, db: Session = Depends(get_db)):
 
     # Create UserInfo entry
     user_info = UserInfo(
-        user_id=new_user.id,
-        address= None,
-        phone_number= None,
-        dob= None,
-        passions=None,
-        lifestyle= None,
-        dietary= None,
-        available= None,
-        religion= None,
-        number_of_children= 0,
-        is_verified=False,
-        profile_picture= None
+        user_id=new_user.id
     )
+     
+   
     db.add(user_info)
     db.commit()
+    db.refresh(user_info)
 
     admins = db.query(User).filter(User.role == "admin").all()
     for admin in admins:
