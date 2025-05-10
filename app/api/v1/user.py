@@ -85,7 +85,7 @@ def get_user_me(
 @router.post("/me/add-bio", response_model=UserInfoResponse)
 async def add_bio(
     bio: str = Form(...),
-    profile_picture: Optional[UploadFile] = File(None),
+    profile_picture: Optional[UploadFile] = File(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -110,7 +110,7 @@ async def add_bio(
     ).first()
 
     profile_data = {}
-    if profile_picture:
+    if profile_picture and profile_picture.filename and profile_picture.size > 0:
         try:
             # Verify file is actually received
             if not profile_picture.filename:
@@ -200,8 +200,8 @@ async def add_bio(
 
 @router.patch("/me/update-bio", response_model=UserInfoResponse)
 async def update_user_bio(
-    bio: Optional[str] = Form(None),
-    profile_picture: Optional[UploadFile] = File(None),
+    bio: Optional[str] = Form(default=None),
+    profile_picture: Optional[UploadFile] = File(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

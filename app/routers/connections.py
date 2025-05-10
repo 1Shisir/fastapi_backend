@@ -154,13 +154,14 @@ async def websocket_notifications(
     
     except WebSocketDisconnect:
         pass
+    
 
-@router.get("/friends")
+@router.get("/friends", response_model=List[FriendResponse])
 def get_friends(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Get all accepted connections
+    # Get all connections where current user is either sender or receiver
     connections = db.query(ConnectionRequest)\
         .options(
             joinedload(ConnectionRequest.sender).joinedload(User.user_info),
@@ -168,31 +169,33 @@ def get_friends(
         )\
         .filter(
             ((ConnectionRequest.sender_id == current_user.id) |
-             (ConnectionRequest.receiver_id == current_user.id)) &
-            (ConnectionRequest.status == "accepted")
+             (ConnectionRequest.receiver_id == current_user.id)),
+            ConnectionRequest.status == "accepted"
         )\
         .all()
 
-    friends  = []  
+    friends = []
     seen_ids = set()
 
     for conn in connections:
-        # Determine which user is the friend
-        friend = conn.receiver if conn.sender_id == current_user.id else conn.sender
-        
-        # Avoid duplicates
+        # Determine friend object
+        if conn.sender_id == current_user.id:
+            friend = conn.receiver
+        else:
+            friend = conn.sender
+
+        # Skip duplicates
         if friend.id in seen_ids:
             continue
             
         seen_ids.add(friend.id)
 
         friends.append({
+            "id": friend.id,
             "email": friend.email,
             "first_name": friend.first_name,
             "last_name": friend.last_name,
-            "profile_picture": friend.user_info.profile_picture if friend.user_info else None,
-
+            "profile_picture": friend.user_info.profile_picture if friend.user_info else None
         })
-        
 
     return friends
