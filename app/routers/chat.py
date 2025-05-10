@@ -50,11 +50,13 @@ async def websocket_chat(
 ):
     user = await get_websocket_user(token, db)
     if not user:
+        await websocket.send_json({"error": "Invalid token"})
         await websocket.close(code=1008)
         return
     
     # Verify friendship
     if not are_friends(db, user.id, friend_id):
+        await websocket.send_json({"error": "Not friends"})
         await websocket.close(code=1008)
         return
 
