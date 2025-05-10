@@ -1,14 +1,17 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from collections import defaultdict
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime
 from app.db.session import get_db
 from app.db.models.user import User
+from app.db.models.user_info import UserInfo
+from app.schemas.user import UserOut
 from app.db.models.message import Message
-from app.db.models.group import GroupMessage,Group,GroupMember
-from app.core.security import get_current_user,are_friends,get_websocket_user,is_group_admin,is_group_member
+from app.db.models.group import GroupMessage
+from app.core.security import get_current_user,are_friends,get_websocket_user,is_group_member
 from app.schemas.message import MessageBase
 from app.db.models.connection_request import ConnectionRequest
 
@@ -118,22 +121,54 @@ def get_chat_history(
         .all()        
 
 #get all chats
-@router.get("/all", response_model=List[MessageBase])
-def get_all_chats(
+@router.get("/all", response_model=List[UserOut])
+def get_chat_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    return db.query(Message)\
-        .filter(
-            (Message.sender_id == current_user.id) |
-            (Message.receiver_id == current_user.id)
-        )\
-        .order_by(Message.timestamp.desc())\
-        .offset((page-1)*page_size)\
-        .limit(page_size)\
+    # Subquery to get distinct users and latest message time
+    subquery = (
+        db.query(
+            Message.sender_id.label("user_id"),
+            func.max(Message.timestamp).label("latest_message")
+        )
+        .filter(Message.receiver_id == current_user.id)
+        .group_by(Message.sender_id)
+        .union_all(
+            db.query(
+                Message.receiver_id.label("user_id"),
+                func.max(Message.timestamp).label("latest_message")
+            )
+            .filter(Message.sender_id == current_user.id)
+            .group_by(Message.receiver_id)
+        )
+        .subquery()
+    )
+
+    # Main query to get user details
+    chat_users = (
+        db.query(User, UserInfo, subquery.c.latest_message)
+        .outerjoin(UserInfo, User.id == UserInfo.user_id)
+        .join(subquery, User.id == subquery.c.user_id)
+        .order_by(subquery.c.latest_message.desc())
+        .offset((page-1)*page_size)
+        .limit(page_size)
         .all()
+    )
+
+    return [
+        {
+            "id": user.id,
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role,
+            "profile_picture": user_info.profile_picture if user_info else None
+        }
+        for user, user_info, _ in chat_users
+    ]
 
 # Mark message as read
 @router.put("/messages/{message_id}/read")
