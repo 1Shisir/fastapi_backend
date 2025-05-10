@@ -7,7 +7,7 @@ from app.db.models.user import User
 from app.db.models.post import Post
 from app.db.models.like import Like
 from app.db.models.user_info import UserInfo
-from app.schemas.user import UserOut
+from app.schemas.user import UserOut,ConnectionRequestWithUser
 from app.schemas.user_info import UserInfoCreate, UserInfoResponse, UserInfoUpdate
 from app.db.session import get_db
 from typing import List, Optional
@@ -368,7 +368,7 @@ def get_user_bio(
 
 
 # get requests sent by other users to the current user
-@router.get("/me/requests", response_model=List[UserOut])
+@router.get("/me/requests", response_model=List[ConnectionRequestWithUser])
 def get_connection_requests(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -388,6 +388,7 @@ def get_connection_requests(
     # Format response with profile pictures
     response = [
         {
+            "request_id": connection_request.id,
             "id": user.id,
             "email": user.email,
             "first_name": user.first_name,
@@ -395,7 +396,7 @@ def get_connection_requests(
             "role": user.role,
             "profile_picture": user_info.profile_picture if user_info else None
         }
-        for user, _, user_info in requests  # _ is the ConnectionRequest we don't need here
+        for user, connection_request, user_info in requests 
     ]
 
     return response

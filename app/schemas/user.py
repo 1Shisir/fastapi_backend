@@ -32,3 +32,9 @@ class UnverifiedUserInfoResponse(UserOut):
 
     class Config:
         from_attributes = True
+
+class ConnectionRequestWithUser(UserOut):
+    request_id: int
+
+    class Config:
+        from_attributes = True
