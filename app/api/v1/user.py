@@ -311,7 +311,8 @@ def get_user_bio(
     current_user: User = Depends(get_current_user)
 ):
     user_info = db.query(UserInfo).filter(
-        UserInfo.user_id == current_user.id
+        UserInfo.user_id == current_user.id,
+        UserInfo.profile_public_id != None
     ).first()
 
     if not user_info:
