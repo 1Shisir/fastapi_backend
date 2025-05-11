@@ -4,6 +4,7 @@ import time
 import logging
 from cloudinary import uploader
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from app.db.models.user import User
 from app.db.models.like import Like
 from sqlalchemy.orm import Session
@@ -15,14 +16,15 @@ from cloudinary.exceptions import Error as CloudinaryError
 
 router = APIRouter()
 
-#get all posts
 @router.get("/", response_model=list[PostOutWithUserLike])
 def get_all_posts(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Get all posts
-    posts = db.query(Post).all()
+    # Get all posts with user relationship loaded
+    posts = db.query(Post)\
+        .options(joinedload(Post.user))\
+        .all()
     
     if not posts:
         raise HTTPException(status_code=404, detail="No posts found")
@@ -35,15 +37,24 @@ def get_all_posts(
     ).all()
     liked_post_ids = {post_id for (post_id,) in liked_posts}
 
-    # Build response with like status
+    # Build response with author name and like status
     return [
         {
-            **post.__dict__,
+            "id": post.id,
+            "user_id": post.user_id,
+            "likes_count": post.likes_count,
+            "content": post.content,
+            "image_url": post.image_url,
+            "created_at": post.created_at,
+            "author_name": f"{post.user.first_name} {post.user.last_name}",
             "is_liked_by_me": post.id in liked_post_ids
         }
         for post in posts
     ]
 
+
+
+# Create a new post
 @router.post("/create", response_model=PostOut)
 async def create_post(
     content: str = Form(...),

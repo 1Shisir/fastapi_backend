@@ -22,6 +22,7 @@ class PostOut(PostBase):
 
 class PostOutWithUserLike(PostOut):
     is_liked_by_me: bool
+    author_name: str
 
     class Config:
         from_attributes = True

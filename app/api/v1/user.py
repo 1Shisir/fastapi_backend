@@ -125,17 +125,15 @@ def get_user_me(
     return response
 
 #Add user bio
-@router.post("/me/add-bio", response_model=UserInfoResponse)
-async def add_bio(
+@router.put("/me/add-bio", response_model=UserInfoResponse)
+async def update_bio(
     bio: str = Form(...),
-    profile_picture: Optional[UploadFile] = File(default=None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
         # Validate and parse the JSON string
         parsed_bio = json.loads(bio)
-
         user_info = UserInfoCreate(**parsed_bio)
     except json.JSONDecodeError:
         raise HTTPException(
@@ -152,71 +150,20 @@ async def add_bio(
         UserInfo.user_id == current_user.id
     ).first()
 
-    profile_data = {}
-    if profile_picture and profile_picture.filename and profile_picture.size > 0:
-        try:
-            # Verify file is actually received
-            if not profile_picture.filename:
-                raise HTTPException(400, "No file provided")
-            
-            # Validate file type
-            if profile_picture.content_type not in ["image/jpeg", "image/png", "image/webp"]:
-                raise HTTPException(400, "Invalid image format")
-
-            # Validate file size
-            if profile_picture.size > 5 * 1024 * 1024:
-                raise HTTPException(400, "File too large (max 5MB)")
-
-            # Reset file pointer to ensure full read
-            await profile_picture.seek(0)
-
-            # Actual upload
-            upload_result = uploader.upload(
-                await profile_picture.read(),
-                folder="profile_pics",
-                public_id=f"user_{current_user.id}_{int(time.time())}",
-                resource_type="image",
-                overwrite=True,
-                quality="auto:good"  # Optimize image
-            )
-            
-            profile_data = {
-                "profile_picture": upload_result["secure_url"],
-                "profile_public_id": upload_result["public_id"]
-            }
-
-        except CloudinaryError as e:
-            logging.error(f"Cloudinary Error: {str(e)}")
-            raise HTTPException(500, f"Cloud upload failed: {e}")
-        except Exception as e:
-            logging.error(f"Unexpected Error: {str(e)}", exc_info=True)
-            raise HTTPException(500, "Image processing failed")
-
     try:
         if existing_info:
-            # Delete old image if exists and new image uploaded
-            if profile_data and existing_info.profile_public_id:
-                try:
-                    uploader.destroy(existing_info.profile_public_id)
-                except CloudinaryError as e:
-                    logging.error(f"Cloudinary delete error: {str(e)}")
-
-            # Update fields
+            # Update bio fields only
             for field, value in user_info.dict().items():
-                setattr(existing_info, field, value)
-            
-            if profile_data:
-                existing_info.profile_picture = profile_data["profile_picture"]
-                existing_info.profile_public_id = profile_data["profile_public_id"]
-            
+                if field not in ["profile_picture", "profile_public_id"]:
+                    setattr(existing_info, field, value)
             db.commit()
             db.refresh(existing_info)
             return existing_info
         else:
+            # Create new info without profile picture data
             new_info = UserInfo(
                 user_id=current_user.id,
-                **user_info.dict(),
-                **profile_data
+                **user_info.dict(exclude={"profile_picture", "profile_public_id"})
             )
             db.add(new_info)
             db.commit()
@@ -226,115 +173,85 @@ async def add_bio(
     except SQLAlchemyError as e:
         db.rollback()
         logging.error(f"Database error: {str(e)}")
-        # Cleanup uploaded image if database operation failed
-        if profile_data.get("profile_public_id"):
-            try:
-                uploader.destroy(profile_data["profile_public_id"])
-            except CloudinaryError as ce:
-                logging.error(f"Cloudinary cleanup error: {str(ce)}")
-        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save profile information"
-        )    
-        return new_info
+            detail="Failed to save bio information"
+        )  
 
-#update user bio
-
-@router.patch("/me/update-bio", response_model=UserInfoResponse)
-async def update_user_bio(
-    bio: Optional[str] = Form(default=None),
-    profile_picture: Optional[UploadFile] = File(default=None),
+#add user profile picture
+@router.put("/me/add-profile-picture", response_model=UserInfoResponse)
+async def update_profile_picture(
+    profile_picture: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        # Parse and validate the bio JSON with UserInfoUpdate schema
-        parsed_bio = json.loads(bio)
-        user_info = UserInfoUpdate(**parsed_bio)
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid JSON format for bio"
-        )
-    except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
-
     existing_info = db.query(UserInfo).filter(
         UserInfo.user_id == current_user.id
     ).first()
 
     profile_data = {}
-    if profile_picture:
-        try:
-            # Validate file type and size
-            if not profile_picture.filename:
-                raise HTTPException(400, "No file provided")
-            if profile_picture.content_type not in ["image/jpeg", "image/png", "image/webp"]:
-                raise HTTPException(400, "Invalid image format")
-            if profile_picture.size > 5 * 1024 * 1024:
-                raise HTTPException(400, "File too large (max 5MB)")
+    try:
+        # Validate file
+        if not profile_picture.filename:
+            raise HTTPException(400, "No file provided")
+        
+        if profile_picture.content_type not in ["image/jpeg", "image/png", "image/webp"]:
+            raise HTTPException(400, "Invalid image format")
 
-            await profile_picture.seek(0)
-            upload_result = uploader.upload(
-                await profile_picture.read(),
-                folder="profile_pics",
-                public_id=f"user_{current_user.id}_{int(time.time())}",
-                resource_type="image",
-                overwrite=True,
-                quality="auto:good"
-            )
-            profile_data = {
-                "profile_picture": upload_result["secure_url"],
-                "profile_public_id": upload_result["public_id"]
-            }
-        except CloudinaryError as e:
-            logging.error(f"Cloudinary Error: {str(e)}")
-            raise HTTPException(500, f"Image upload failed: {e}")
-        except Exception as e:
-            logging.error(f"Unexpected Error: {str(e)}", exc_info=True)
-            raise HTTPException(500, "Image processing failed")
+        if profile_picture.size > 5 * 1024 * 1024:
+            raise HTTPException(400, "File too large (max 5MB)")
+
+        await profile_picture.seek(0)
+        upload_result = uploader.upload(
+            await profile_picture.read(),
+            folder="profile_pics",
+            public_id=f"user_{current_user.id}_{int(time.time())}",
+            resource_type="image",
+            overwrite=True,
+            quality="auto:good"
+        )
+        
+        profile_data = {
+            "profile_picture": upload_result["secure_url"],
+            "profile_public_id": upload_result["public_id"]
+        }
+
+    except CloudinaryError as e:
+        logging.error(f"Cloudinary Error: {str(e)}")
+        raise HTTPException(500, f"Image upload failed: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected Error: {str(e)}", exc_info=True)
+        raise HTTPException(500, "Image processing failed")
 
     try:
+        # Delete old image if exists
+        old_public_id = None
         if existing_info:
-            # Update existing UserInfo with provided fields only
-            update_data = user_info.dict(exclude_unset=True)
-            for field, value in update_data.items():
-                setattr(existing_info, field, value)
-
-            # Handle profile picture update
-            if profile_data:
-                # Delete old image if exists
-                if existing_info.profile_public_id:
-                    try:
-                        uploader.destroy(existing_info.profile_public_id)
-                    except CloudinaryError as e:
-                        logging.error(f"Failed to delete old image: {str(e)}")
-                existing_info.profile_picture = profile_data["profile_picture"]
-                existing_info.profile_public_id = profile_data["profile_public_id"]
-
-            db.commit()
-            db.refresh(existing_info)
-            return existing_info
+            old_public_id = existing_info.profile_public_id
+            existing_info.profile_picture = profile_data["profile_picture"]
+            existing_info.profile_public_id = profile_data["profile_public_id"]
         else:
-            # Create new UserInfo with provided fields and profile data
-            new_info_data = user_info.dict(exclude_unset=True)
-            new_info = UserInfo(
+            existing_info = UserInfo(
                 user_id=current_user.id,
-                **new_info_data,
                 **profile_data
             )
-            db.add(new_info)
-            db.commit()
-            db.refresh(new_info)
-            return new_info
+            db.add(existing_info)
+        
+        db.commit()
+        db.refresh(existing_info)
+
+        # Delete old image after successful update
+        if old_public_id:
+            try:
+                uploader.destroy(old_public_id)
+            except CloudinaryError as e:
+                logging.error(f"Failed to delete old image: {str(e)}")
+
+        return existing_info
+
     except SQLAlchemyError as e:
         db.rollback()
         logging.error(f"Database error: {str(e)}")
-        # Cleanup uploaded image on failure
         if profile_data.get("profile_public_id"):
             try:
                 uploader.destroy(profile_data["profile_public_id"])
@@ -342,8 +259,9 @@ async def update_user_bio(
                 logging.error(f"Cloudinary cleanup error: {str(ce)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save profile information"
+            detail="Failed to save profile picture"
         )
+
 
                
 
