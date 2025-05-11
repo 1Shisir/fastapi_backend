@@ -1,9 +1,7 @@
-from fastapi import APIRouter,Depends,HTTPException,status,File,UploadFile,Form
+from fastapi import APIRouter,Depends,HTTPException,status,File,UploadFile,Body
 import time
-import logging,json
-from fastapi.encoders import jsonable_encoder
+import logging
 from sqlalchemy.exc import SQLAlchemyError
-from pydantic import ValidationError
 from app.db.models.user import User
 from app.db.models.post import Post
 from app.db.models.like import Like
@@ -99,43 +97,42 @@ def get_user_me(
 
 @router.put("/me/update-bio", response_model=UserInfoResponse)
 async def update_bio(
-    bio_data: str = Form(..., description="JSON string containing bio fields"),
+    user_info_update: UserInfoUpdate = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
-        # Parse and validate the JSON input
-        bio_dict = json.loads(bio_data)
-        update_data = UserInfoUpdate(**bio_dict)  # Use update schema with optional fields
-    except json.JSONDecodeError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid JSON format: {str(e)}"
-        )
-    except ValidationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=jsonable_encoder(e.errors())
-        )
-
-    try:
-        # Get or create user info
         user_info = db.query(UserInfo).filter(
             UserInfo.user_id == current_user.id
         ).first()
 
+        update_data = user_info_update.dict(exclude_unset=True)
+        old_public_id = None
+
         if user_info:
-            # Update only provided fields
-            for key, value in update_data.dict(exclude_unset=True).items():
+            # Store old public ID before changes
+            old_public_id = user_info.profile_public_id
+
+            # Update fields
+            for key, value in update_data.items():
                 setattr(user_info, key, value)
+
+            # Handle profile picture removal
+            if 'profile_picture' in update_data and update_data['profile_picture'] is None:
+                user_info.profile_public_id = None
+                if old_public_id:
+                    try:
+                        uploader.destroy(old_public_id)
+                    except CloudinaryError as e:
+                        logging.error(f"Cloudinary delete error: {str(e)}")
         else:
-            # Create new entry with validated data
+            # Create new entry
             user_info = UserInfo(
                 user_id=current_user.id,
-                **update_data.dict(exclude_unset=True)
+                **update_data
             )
             db.add(user_info)
-        
+
         db.commit()
         db.refresh(user_info)
         return user_info

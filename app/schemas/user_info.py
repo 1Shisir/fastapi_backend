@@ -50,8 +50,6 @@ class UserInfoUpdate(BaseModel):
     available: Optional[bool] = None
     religion: Optional[str] = None
     number_of_children: Optional[int] = None
-    profile_picture: Optional[str] = None
-    profile_public_id: Optional[str] = None
 
     class Config:
         from_attributes = True
