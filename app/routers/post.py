@@ -5,9 +5,10 @@ import logging
 from cloudinary import uploader
 from sqlalchemy.exc import SQLAlchemyError
 from app.db.models.user import User
+from app.db.models.like import Like
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.post import PostCreate, PostOut
+from app.schemas.post import  PostOut, PostOutWithUserLike
 from app.core.security import get_current_user
 from app.db.models.post import Post
 from cloudinary.exceptions import Error as CloudinaryError
@@ -15,14 +16,33 @@ from cloudinary.exceptions import Error as CloudinaryError
 router = APIRouter()
 
 #get all posts
-@router.get("/", response_model=list[PostOut])
+@router.get("/", response_model=list[PostOutWithUserLike])
 def get_all_posts(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
+    # Get all posts
     posts = db.query(Post).all()
+    
     if not posts:
         raise HTTPException(status_code=404, detail="No posts found")
-    return posts
+
+    # Get IDs of posts liked by current user
+    post_ids = [post.id for post in posts]
+    liked_posts = db.query(Like.post_id).filter(
+        Like.user_id == current_user.id,
+        Like.post_id.in_(post_ids)
+    ).all()
+    liked_post_ids = {post_id for (post_id,) in liked_posts}
+
+    # Build response with like status
+    return [
+        {
+            **post.__dict__,
+            "is_liked_by_me": post.id in liked_post_ids
+        }
+        for post in posts
+    ]
 
 @router.post("/create", response_model=PostOut)
 async def create_post(

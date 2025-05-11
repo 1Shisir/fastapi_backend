@@ -19,3 +19,9 @@ class PostOut(PostBase):
 
     class Config:
         from_attributes = True
+
+class PostOutWithUserLike(PostOut):
+    is_liked_by_me: bool
+
+    class Config:
+        from_attributes = True
