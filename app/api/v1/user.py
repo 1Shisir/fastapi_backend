@@ -1,6 +1,7 @@
 from fastapi import APIRouter,Depends,HTTPException,status,File,UploadFile,Form
 import time
 import logging,json
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.exc import SQLAlchemyError
 from pydantic import ValidationError
 from app.db.models.user import User
@@ -8,13 +9,12 @@ from app.db.models.post import Post
 from app.db.models.like import Like
 from app.db.models.user_info import UserInfo
 from app.schemas.user import UserOut,ConnectionRequestWithUser
-from app.schemas.user_info import UserInfoCreate, UserInfoResponse, UserInfoUpdate
+from app.schemas.user_info import UserInfoResponse, UserInfoUpdate
 from app.db.session import get_db
-from typing import List, Optional
+from typing import List
 from sqlalchemy.orm import Session
-from app.core.security import get_current_user,are_friends
+from app.core.security import get_current_user
 from cloudinary import uploader
-from cloudinary.uploader import upload,destroy
 from cloudinary.exceptions import Error as CloudinaryError
 from app.db.models.connection_request import ConnectionRequest
 from app.schemas.post import PostOut
@@ -23,38 +23,8 @@ from app.schemas.post import PostOut
 router = APIRouter()
 
 #get user who are  not friends with the current user
-# @router.get("/suggested",response_model=List[UserOut])
-# def get_users(
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user)
-# ):
-#     users = db.query(User,UserInfo)\
-#         .outerjoin(UserInfo, User.id == UserInfo.user_id)\
-#         .filter(
-#             User.role != "admin",
-#             User.id != current_user.id,
-#         )\
-#         .all()
-    
-#     if not users:
-#         return []  # Return an empty list if no users are found
-
-#     #formatting the response
-#     response = [
-#         {
-#             "id": user.id,
-#             "email": user.email,
-#             "first_name": user.first_name,
-#             "last_name": user.last_name,
-#             "role": user.role,
-#             "profile_picture": user_info.profile_picture
-#         }
-#         for user,user_info in users
-#         if not are_friends(db, current_user.id, user.id)
-#     ]
-#     return response    
-
-
+# This endpoint fetches a list of users who are not friends with the current user.
+# It excludes users who have sent connection requests to the current user.
 @router.get("/suggested", response_model=List[UserOut])
 def get_suggested_users(
     db: Session = Depends(get_db),
@@ -96,8 +66,8 @@ def get_suggested_users(
     ]
 
 
-
-
+# Get user details
+# This endpoint fetches the current user's details, including their profile picture if available.
 @router.get("/me", response_model=UserOut)
 def get_user_me(
     db: Session = Depends(get_db),
@@ -125,58 +95,60 @@ def get_user_me(
     return response
 
 #Add user bio
-@router.put("/me/add-bio", response_model=UserInfoResponse)
+# This endpoint allows the user to update their bio information.
+
+@router.put("/me/update-bio", response_model=UserInfoResponse)
 async def update_bio(
-    bio: str = Form(...),
+    bio_data: str = Form(..., description="JSON string containing bio fields"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
-        # Validate and parse the JSON string
-        parsed_bio = json.loads(bio)
-        user_info = UserInfoCreate(**parsed_bio)
-    except json.JSONDecodeError:
+        # Parse and validate the JSON input
+        bio_dict = json.loads(bio_data)
+        update_data = UserInfoUpdate(**bio_dict)  # Use update schema with optional fields
+    except json.JSONDecodeError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Invalid JSON format for bio"
+            detail=f"Invalid JSON format: {str(e)}"
         )
     except ValidationError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
+            detail=jsonable_encoder(e.errors())
         )
 
-    existing_info = db.query(UserInfo).filter(
-        UserInfo.user_id == current_user.id
-    ).first()
-
     try:
-        if existing_info:
-            # Update bio fields only
-            for field, value in user_info.dict().items():
-                if field not in ["profile_picture", "profile_public_id"]:
-                    setattr(existing_info, field, value)
-            db.commit()
-            db.refresh(existing_info)
-            return existing_info
+        # Get or create user info
+        user_info = db.query(UserInfo).filter(
+            UserInfo.user_id == current_user.id
+        ).first()
+
+        if user_info:
+            # Update only provided fields
+            for key, value in update_data.dict(exclude_unset=True).items():
+                setattr(user_info, key, value)
         else:
-            # Create new info without profile picture data
-            new_info = UserInfo(
+            # Create new entry with validated data
+            user_info = UserInfo(
                 user_id=current_user.id,
-                **user_info.dict(exclude={"profile_picture", "profile_public_id"})
+                **update_data.dict(exclude_unset=True)
             )
-            db.add(new_info)
-            db.commit()
-            db.refresh(new_info)
-            return new_info
+            db.add(user_info)
+        
+        db.commit()
+        db.refresh(user_info)
+        return user_info
 
     except SQLAlchemyError as e:
         db.rollback()
         logging.error(f"Database error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to save bio information"
-        )  
+            detail="Failed to update bio information"
+        )
+    
+
 
 #add user profile picture
 @router.put("/me/add-profile-picture", response_model=UserInfoResponse)
