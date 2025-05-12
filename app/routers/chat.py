@@ -123,7 +123,7 @@ def get_chat_history(
             ((Message.sender_id == friend_id) &
              (Message.receiver_id == current_user.id))
         )\
-        .order_by(Message.timestamp.desc())\
+        .order_by(Message.timestamp.asc())\
         .offset((page-1)*page_size)\
         .limit(page_size)\
         .all()        
