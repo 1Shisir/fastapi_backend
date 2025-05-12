@@ -8,7 +8,6 @@ from app.schemas.token import TokenData
 from app.db.session import get_db
 from sqlalchemy.orm import Session
 from app.db.models.user import User
-from app.db.models.group import GroupMember
 from app.db.models.connection_request import ConnectionRequest  
 
 SECRET_KEY = "supersecretkey"
@@ -83,17 +82,3 @@ async def get_websocket_user(token: str, db:Session):
     
     user = db.query(User).filter(User.email == username).first()
     return user
-
-
-def is_group_member(db: Session, group_id: int, user_id: int):
-    return db.query(GroupMember)\
-        .filter(GroupMember.group_id == group_id,
-                GroupMember.user_id == user_id)\
-        .first() is not None
-
-def is_group_admin(db: Session, group_id: int, user_id: int):
-    return db.query(GroupMember)\
-        .filter(GroupMember.group_id == group_id,
-                GroupMember.user_id == user_id,
-                GroupMember.role == 'admin')\
-        .first() is not None    

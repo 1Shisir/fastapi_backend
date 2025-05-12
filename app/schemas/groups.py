@@ -4,11 +4,11 @@ from pydantic import BaseModel
 
 class GroupBase(BaseModel):
     name: str
-    description: Optional[str] = None
     owner_id: int
 
-class GroupCreate(GroupBase):
-    pass
+class GroupCreate(BaseModel):
+    name: str
+    member_ids: Optional[List[int]] = []
 
 class GroupMessage(BaseModel):
     sender_id: int
@@ -19,18 +19,17 @@ class GroupMessage(BaseModel):
         from_attributes = True
 
 class GroupMemberAdd(BaseModel):
-    user_id: int
-    role: str = 'member'
+    user_ids: List[int]
 
 class GroupResponse(BaseModel):
     id: int
     name: str
-    description: Optional[str]
     owner_id: int
     created_at: datetime
     member_count: int
-    your_role: str
-    joined_at: datetime
+    members: List[int]
 
     class Config:
         from_attributes = True    
+
+    

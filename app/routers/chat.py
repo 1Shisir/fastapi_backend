@@ -9,12 +9,11 @@ from datetime import datetime
 from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.user_info import UserInfo
-from app.schemas.user import UserOut
+from app.db.models.group import Group,GroupMessage,group_user_association
 from app.db.models.message import Message
 from app.db.models.group import GroupMessage
-from app.core.security import get_current_user,are_friends,get_websocket_user,is_group_member
+from app.core.security import get_current_user,are_friends,get_websocket_user
 from app.schemas.message import MessageBase
-from app.db.models.connection_request import ConnectionRequest
 
 
 router = APIRouter()
@@ -126,22 +125,24 @@ def get_chat_history(
         .order_by(Message.timestamp.asc())\
         .offset((page-1)*page_size)\
         .limit(page_size)\
-        .all()        
+        .all()  
+
+
 
 #get all chats
-@router.get("/all", response_model=List[UserOut])
-def get_chat_users(
+@router.get("/all")
+def get_all_chats(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # Subquery to identify conversation partners and latest message time
+    # --- Direct Chat Subquery ---
     subquery = (
         db.query(
             case(
-                    (Message.sender_id == current_user.id, Message.receiver_id),
-                    (Message.receiver_id == current_user.id, Message.sender_id),  
+                (Message.sender_id == current_user.id, Message.receiver_id),
+                (Message.receiver_id == current_user.id, Message.sender_id),
                 else_=None
             ).label("partner_id"),
             func.max(Message.timestamp).label("latest_message")
@@ -154,7 +155,7 @@ def get_chat_users(
         .subquery()
     )
 
-    # Main query to get user details
+    # --- Direct Chat Users ---
     chat_users = (
         db.query(User, UserInfo)
         .join(subquery, User.id == subquery.c.partner_id)
@@ -164,22 +165,56 @@ def get_chat_users(
             User.role != "admin"
         )
         .order_by(subquery.c.latest_message.desc())
-        .offset((page-1)*page_size)
+        .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
     )
 
-    return [
-        {
-            "id": user.id,
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "role": user.role,
-            "profile_picture": user_info.profile_picture if user_info else None
-        }
-        for user, user_info in chat_users
-    ]
+    # --- Group Chat Subquery using association table ---
+    group_subquery = (
+        db.query(
+            Group.id.label("group_id"),
+            func.max(GroupMessage.timestamp).label("latest_message")
+        )
+        .join(group_user_association, group_user_association.c.group_id == Group.id)
+        .join(GroupMessage, GroupMessage.group_id == Group.id)
+        .filter(group_user_association.c.user_id == current_user.id)
+        .group_by(Group.id)
+        .subquery()
+    )
+
+    # --- Group Chats ---
+    group_chats = (
+        db.query(Group, GroupMessage)
+        .join(group_subquery, Group.id == group_subquery.c.group_id)
+        .outerjoin(GroupMessage, GroupMessage.group_id == group_subquery.c.group_id)
+        .order_by(group_subquery.c.latest_message.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "direct_chats": [
+            {
+                "id": user.id,
+                "email": user.email,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "profile_picture": user_info.profile_picture if user_info else None,
+            }
+            for user, user_info in chat_users
+        ],
+        "group_chats": [
+            {
+                "id": group.id,
+                "name": group.name,
+                "latest_message": {"sender_id": message.sender_id,"content": message.content,"timestamp": message.timestamp} if message else None,
+                "members": [member.id for member in group.members]
+            }
+            for group, message in group_chats
+        ]
+    }
 
 # Mark message as read
 @router.put("/messages/{message_id}/read")
@@ -228,10 +263,6 @@ async def group_chat_websocket(
     db: Session = Depends(get_db)
 ):
     user = await get_websocket_user(token, db)
-    
-    if not is_group_member(db, group_id, user.id):
-        await websocket.close(code=1008)
-        return
 
     await group_manager.connect(websocket, group_id, user.id)
     
