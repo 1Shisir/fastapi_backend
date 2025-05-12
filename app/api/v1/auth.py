@@ -87,6 +87,6 @@ async def login( db: Session = Depends(get_db),form_data: OAuth2PasswordRequestF
     access_token = create_access_token(
         token_data
     )
-    return Token(access_token=access_token, token_type="bearer", role=user.role)
+    return Token(access_token=access_token, token_type="bearer", role=user.role, user_id=user.id)
     
    

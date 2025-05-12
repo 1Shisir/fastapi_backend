@@ -70,6 +70,11 @@ async def websocket_chat(
         while True:
 
             data = await websocket.receive_json()
+
+            # Validate data
+            if "message" not in data:
+                await websocket.send_json({"error": "Invalid message format"})
+                continue
             
             # Save message to database
             new_message = Message(
@@ -95,6 +100,8 @@ async def websocket_chat(
             
     except WebSocketDisconnect:
         manager.disconnect(user.id, friend_id)
+
+
 
 
 # Get chat history
