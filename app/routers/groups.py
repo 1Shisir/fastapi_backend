@@ -12,7 +12,7 @@ from app.schemas.groups import GroupMessage as GroupMessageSchema
 router = APIRouter()
 
 # Create group and auto-add creator as member
-@router.post("/", response_model=GroupBase)
+@router.post("/create", response_model=GroupBase)
 def create_group(
     group_data: GroupCreate,
     db: Session = Depends(get_db),
