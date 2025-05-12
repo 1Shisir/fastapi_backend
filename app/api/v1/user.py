@@ -306,3 +306,32 @@ def get_liked_posts(
         return []  # Return an empty list if no liked posts are found
     
     return liked_posts
+
+# check user verification status
+# This endpoint checks if the current user is verified.
+@router.get("/status", status_code=status.HTTP_200_OK)
+def check_user_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Check user verification status
+    - Returns 200 OK if user is verified (is_verified=True in user_info)
+    - Returns 403 Forbidden if user is not verified
+    """
+    # Get user info with verification status
+    user_info = db.query(UserInfo).filter(
+        UserInfo.user_id == current_user.id
+    ).first()
+
+    if not user_info or not user_info.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is not yet verified"
+        )
+    
+    return {
+        "is_verifed": user_info.is_verified,
+        "user_id": current_user.id,
+        "Usernmae": f"{current_user.first_name} {current_user.last_name}",
+    }    
