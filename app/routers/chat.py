@@ -137,11 +137,29 @@ def get_all_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    users = db.query(User).filter(User.id != current_user.id).all()
+    # PRIVATE CHATS with actual conversation or friends
+    message_partners_subq = (
+        db.query(
+            case(
+                (Message.sender_id == current_user.id, Message.receiver_id),
+                (Message.receiver_id == current_user.id, Message.sender_id),
+                else_=None
+            ).label("partner_id")
+        )
+        .filter(
+            or_(
+                Message.sender_id == current_user.id,
+                Message.receiver_id == current_user.id
+            )
+        )
+        .distinct()
+        .subquery()
+    )
+
+    partners = db.query(User).join(message_partners_subq, User.id == message_partners_subq.c.partner_id).all()
 
     private_messages = []
-    for user in users:
-        # Get last message between current_user and this user
+    for user in partners:
         last_msg = (
             db.query(Message)
             .filter(
@@ -166,7 +184,7 @@ def get_all_chats(
             }
         })
 
-    # 2. --- GROUP CHATS: All groups user belongs to
+    # --- GROUP CHATS (unchanged) ---
     groups = (
         db.query(Group)
         .join(group_user_association, group_user_association.c.group_id == Group.id)
@@ -176,7 +194,6 @@ def get_all_chats(
 
     group_messages = []
     for group in groups:
-        # Get last message from group
         last_msg = (
             db.query(GroupMessage)
             .filter(GroupMessage.group_id == group.id)
@@ -199,6 +216,7 @@ def get_all_chats(
         "private_message": private_messages,
         "group_message": group_messages
     }
+
 
 
 
