@@ -137,97 +137,69 @@ def get_all_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # --- Direct Chat Subquery ---
-    subquery = (
-        db.query(
-            case(
-                (Message.sender_id == current_user.id, Message.receiver_id),
-                (Message.receiver_id == current_user.id, Message.sender_id),
-                else_=None
-            ).label("partner_id"),
-            func.max(Message.timestamp).label("latest_message")
-        )
-        .filter(
-            (Message.sender_id == current_user.id) |
-            (Message.receiver_id == current_user.id)
-        )
-        .group_by("partner_id")
-        .subquery()
-    )
-
-    # --- Direct Chat Users ---
-    latest_messages = (
-        db.query(Message)
-        .join(subquery, and_(
-        or_(
-            and_(Message.sender_id == current_user.id, Message.receiver_id == subquery.c.partner_id),
-            and_(Message.receiver_id == current_user.id, Message.sender_id == subquery.c.partner_id),
-        ),
-        Message.timestamp == subquery.c.latest_message
-    ))
-    .all()
-)
+    users = db.query(User).filter(User.id != current_user.id).all()
 
     private_messages = []
-    for msg in latest_messages:
-    # Identify the other participant
-        partner = msg.receiver if msg.sender_id == current_user.id else msg.sender
+    for user in users:
+        # Get last message between current_user and this user
+        last_msg = (
+            db.query(Message)
+            .filter(
+                or_(
+                    and_(Message.sender_id == current_user.id, Message.receiver_id == user.id),
+                    and_(Message.receiver_id == current_user.id, Message.sender_id == user.id)
+                )
+            )
+            .order_by(Message.timestamp.desc())
+            .first()
+        )
 
-    # Get user info
-        user_info = db.query(UserInfo).filter(UserInfo.user_id == partner.id).first()
+        user_info = db.query(UserInfo).filter(UserInfo.user_id == user.id).first()
 
         private_messages.append({
-            "id": partner.id,
-            "name": f"{partner.first_name} {partner.last_name}",
+            "id": user.id,
+            "name": f"{user.first_name} {user.last_name}",
             "profile_picture": user_info.profile_picture if user_info else None,
             "last_message": {
-                "sender": f"{msg.sender.first_name} {msg.sender.last_name}",
-                "content": msg.content
-         }
-    })
+                "sender": f"{last_msg.sender.first_name} {last_msg.sender.last_name}" if last_msg else "",
+                "content": last_msg.content if last_msg else ""
+            }
+        })
 
-    # --- Group Chat Subquery ---
-    group_latest_subq = (
-    db.query(
-        GroupMessage.group_id,
-        func.max(GroupMessage.timestamp).label("latest_timestamp")
-    )
-    .join(Group, Group.id == GroupMessage.group_id)
-    .join(group_user_association, group_user_association.c.group_id == Group.id)
-    .filter(group_user_association.c.user_id == current_user.id)
-    .group_by(GroupMessage.group_id)
-    .subquery()
-    )
-
-    group_latest_messages = (
-        db.query(GroupMessage)
-        .join(group_latest_subq, and_(
-        GroupMessage.group_id == group_latest_subq.c.group_id,
-        GroupMessage.timestamp == group_latest_subq.c.latest_timestamp
-    ))
-    .all()
+    # 2. --- GROUP CHATS: All groups user belongs to
+    groups = (
+        db.query(Group)
+        .join(group_user_association, group_user_association.c.group_id == Group.id)
+        .filter(group_user_association.c.user_id == current_user.id)
+        .all()
     )
 
     group_messages = []
-    for message in group_latest_messages:
-        group = message.group
+    for group in groups:
+        # Get last message from group
+        last_msg = (
+            db.query(GroupMessage)
+            .filter(GroupMessage.group_id == group.id)
+            .order_by(GroupMessage.timestamp.desc())
+            .first()
+        )
         participants = group.members
         group_messages.append({
             "id": group.id,
             "name": group.name,
             "last_message": {
-                "sender": f"{message.sender.first_name} {message.sender.last_name}" if message.sender else None,
-                "content": message.content
+                "sender": f"{last_msg.sender.first_name} {last_msg.sender.last_name}" if last_msg and last_msg.sender else "",
+                "content": last_msg.content if last_msg else ""
             },
             "participants_names": [member.first_name for member in participants],
             "participants_ids": [member.id for member in participants]
         })
 
-
     return {
         "private_message": private_messages,
         "group_message": group_messages
     }
+
 
 
 # Mark message as read
