@@ -77,7 +77,7 @@ def get_group_messages(
 
     return db.query(GroupMessage)\
         .filter(GroupMessage.group_id == group_id)\
-        .order_by(GroupMessage.timestamp.desc())\
+        .order_by(GroupMessage.timestamp.asc())\
         .offset((page - 1) * page_size)\
         .limit(page_size)\
         .all()

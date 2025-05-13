@@ -1,6 +1,6 @@
 from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, and_, or_
 from sqlalchemy.sql import case
 from collections import defaultdict
 from typing import List
@@ -157,9 +157,13 @@ def get_all_chats(
 
     # --- Direct Chat Users ---
     chat_users = (
-        db.query(User, UserInfo)
+        db.query(User, UserInfo, Message)
         .join(subquery, User.id == subquery.c.partner_id)
         .outerjoin(UserInfo, User.id == UserInfo.user_id)
+        .outerjoin(Message, or_(
+            and_(Message.sender_id == current_user.id, Message.receiver_id == User.id),
+            and_(Message.receiver_id == current_user.id, Message.sender_id == User.id)
+        ))
         .filter(
             User.id != current_user.id,
             User.role != "admin"
@@ -170,7 +174,19 @@ def get_all_chats(
         .all()
     )
 
-    # --- Group Chat Subquery using association table ---
+    private_messages = []
+    for user, user_info, message in chat_users:
+        private_messages.append({
+            "id": user.id,
+            "name": f"{user.first_name} {user.last_name}",
+            "profile_picture": user_info.profile_picture if user_info else None,
+            "last_message": {
+                "sender": f"{message.sender.first_name} {message.sender.last_name}" if message else None,
+                "content": message.content if message else None
+            } if message else None
+        })
+
+    # --- Group Chat Subquery ---
     group_subquery = (
         db.query(
             Group.id.label("group_id"),
@@ -183,7 +199,6 @@ def get_all_chats(
         .subquery()
     )
 
-    # --- Group Chats ---
     group_chats = (
         db.query(Group, GroupMessage)
         .join(group_subquery, Group.id == group_subquery.c.group_id)
@@ -194,27 +209,25 @@ def get_all_chats(
         .all()
     )
 
+    group_messages = []
+    for group, message in group_chats:
+        participants = group.members
+        group_messages.append({
+            "id": group.id,
+            "name": group.name,
+            "last_message": {
+                "sender": f"{message.sender.first_name} {message.sender.last_name}" if message and message.sender else None,
+                "content": message.content if message else None
+            } if message else None,
+            "participants_names": [f"{member.first_name}" for member in participants],
+            "participants_ids": [member.id for member in participants]
+        })
+
     return {
-        "direct_chats": [
-            {
-                "id": user.id,
-                "email": user.email,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "profile_picture": user_info.profile_picture if user_info else None,
-            }
-            for user, user_info in chat_users
-        ],
-        "group_chats": [
-            {
-                "id": group.id,
-                "name": group.name,
-                "latest_message": {"sender_id": message.sender_id,"content": message.content,"timestamp": message.timestamp} if message else None,
-                "members": [member.id for member in group.members]
-            }
-            for group, message in group_chats
-        ]
+        "private_message": private_messages,
+        "group_message": group_messages
     }
+
 
 # Mark message as read
 @router.put("/messages/{message_id}/read")
