@@ -156,72 +156,73 @@ def get_all_chats(
     )
 
     # --- Direct Chat Users ---
-    chat_users = (
-        db.query(User, UserInfo, Message)
-        .join(subquery, User.id == subquery.c.partner_id)
-        .outerjoin(UserInfo, User.id == UserInfo.user_id)
-        .outerjoin(Message, or_(
-            and_(Message.sender_id == current_user.id, Message.receiver_id == User.id),
-            and_(Message.receiver_id == current_user.id, Message.sender_id == User.id)
-        ))
-        .filter(
-            User.id != current_user.id,
-            User.role != "admin"
-        )
-        .order_by(subquery.c.latest_message.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    latest_messages = (
+        db.query(Message)
+        .join(subquery, and_(
+        or_(
+            and_(Message.sender_id == current_user.id, Message.receiver_id == subquery.c.partner_id),
+            and_(Message.receiver_id == current_user.id, Message.sender_id == subquery.c.partner_id),
+        ),
+        Message.timestamp == subquery.c.latest_message
+    ))
+    .all()
+)
 
     private_messages = []
-    for user, user_info, message in chat_users:
+    for msg in latest_messages:
+    # Identify the other participant
+        partner = msg.receiver if msg.sender_id == current_user.id else msg.sender
+
+    # Get user info
+        user_info = db.query(UserInfo).filter(UserInfo.user_id == partner.id).first()
+
         private_messages.append({
-            "id": user.id,
-            "name": f"{user.first_name} {user.last_name}",
+            "id": partner.id,
+            "name": f"{partner.first_name} {partner.last_name}",
             "profile_picture": user_info.profile_picture if user_info else None,
             "last_message": {
-                "sender": f"{message.sender.first_name} {message.sender.last_name}" if message else None,
-                "content": message.content if message else None
-            } if message else None
-        })
+                "sender": f"{msg.sender.first_name} {msg.sender.last_name}",
+                "content": msg.content
+         }
+    })
 
     # --- Group Chat Subquery ---
-    group_subquery = (
-        db.query(
-            Group.id.label("group_id"),
-            func.max(GroupMessage.timestamp).label("latest_message")
-        )
-        .join(group_user_association, group_user_association.c.group_id == Group.id)
-        .join(GroupMessage, GroupMessage.group_id == Group.id)
-        .filter(group_user_association.c.user_id == current_user.id)
-        .group_by(Group.id)
-        .subquery()
+    group_latest_subq = (
+    db.query(
+        GroupMessage.group_id,
+        func.max(GroupMessage.timestamp).label("latest_timestamp")
+    )
+    .join(Group, Group.id == GroupMessage.group_id)
+    .join(group_user_association, group_user_association.c.group_id == Group.id)
+    .filter(group_user_association.c.user_id == current_user.id)
+    .group_by(GroupMessage.group_id)
+    .subquery()
     )
 
-    group_chats = (
-        db.query(Group, GroupMessage)
-        .join(group_subquery, Group.id == group_subquery.c.group_id)
-        .outerjoin(GroupMessage, GroupMessage.group_id == group_subquery.c.group_id)
-        .order_by(group_subquery.c.latest_message.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    group_latest_messages = (
+        db.query(GroupMessage)
+        .join(group_latest_subq, and_(
+        GroupMessage.group_id == group_latest_subq.c.group_id,
+        GroupMessage.timestamp == group_latest_subq.c.latest_timestamp
+    ))
+    .all()
     )
 
     group_messages = []
-    for group, message in group_chats:
+    for message in group_latest_messages:
+        group = message.group
         participants = group.members
         group_messages.append({
             "id": group.id,
             "name": group.name,
             "last_message": {
-                "sender": f"{message.sender.first_name} {message.sender.last_name}" if message and message.sender else None,
-                "content": message.content if message else None
-            } if message else None,
-            "participants_names": [f"{member.first_name}" for member in participants],
+                "sender": f"{message.sender.first_name} {message.sender.last_name}" if message.sender else None,
+                "content": message.content
+            },
+            "participants_names": [member.first_name for member in participants],
             "participants_ids": [member.id for member in participants]
         })
+
 
     return {
         "private_message": private_messages,
